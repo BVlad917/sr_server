@@ -1,9 +1,11 @@
-import torch
 from flask import Flask, jsonify, request
 import numpy as np
 import base64
 import cv2
 from flask_cors import CORS
+
+from ocr import get_ocr_fn
+from sisr import get_sisr_forward_fn
 
 app = Flask(__name__)
 CORS(app)
@@ -11,19 +13,18 @@ CORS(app)
 
 @app.route('/super-resolution', methods=['POST'])
 def run_image_sr():
-    image = request.files['image'].read()
+    lr_img_bytes = request.files['image'].read()
     model_name = request.form['model_name']
 
-    np_arr = np.frombuffer(image, np.uint8)
-    img_tensor = torch.from_numpy(np_arr)
+    lr_img_encoded = np.frombuffer(lr_img_bytes, np.uint8)
+    lr_img = cv2.imdecode(lr_img_encoded, cv2.IMREAD_COLOR)
 
-    # do stuff with img_tensor
-    result_tensor = img_tensor
+    # process
+    sisr_fn = get_sisr_forward_fn(model_name=model_name)
+    sr_img = sisr_fn(lr_img)
 
-    np_arr = result_tensor.numpy()
-    img = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
-    _, img_bytes = cv2.imencode('.png', img)
-    image_data = base64.b64encode(img_bytes).decode('utf-8')
+    _, sr_img_bytes = cv2.imencode('.png', sr_img)
+    image_data = base64.b64encode(sr_img_bytes).decode('utf-8')
 
     response = {'image': image_data}
     return jsonify(response)
@@ -31,15 +32,17 @@ def run_image_sr():
 
 @app.route('/ocr', methods=['POST'])
 def run_ocr():
-    image = request.form['image']
+    sr_img = request.form['image']
     model_name = request.form['model_name']
-    _, image = image.split(',', 1)
-    image = base64.b64decode(image)
-    np_arr = np.frombuffer(image, np.uint8)
-    img_tensor = torch.from_numpy(np_arr)
 
-    # do stuff with img_tensor
-    result_text = 'OCR OUTPUT'
+    _, image = sr_img.split(',', 1)
+    sr_img = base64.b64decode(image)
+    sr_img = np.frombuffer(sr_img, np.uint8)
+    sr_img = cv2.imdecode(sr_img, cv2.IMREAD_COLOR)
+
+    # process
+    ocr_fn = get_ocr_fn(model_name)
+    result_text = ocr_fn(sr_img)
 
     response = {'text': result_text}
     return jsonify(response)

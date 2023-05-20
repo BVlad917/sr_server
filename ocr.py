@@ -18,7 +18,7 @@ def run_tesseract_string_only(img):
     return pred_str
 
 
-def run_tesseract_full(img):
+def run_tesseract(img):
     """
     Run Google Tesseract OCR on the given image and return all the information provided by the OCR system.
     :param img: np array; RGB format image
@@ -32,7 +32,7 @@ def run_tesseract_full(img):
     texts, confidences, boxes = [], [], []
     num_boxes = len(d['level'])
     for i in range(num_boxes):
-        text = d['text'][i]
+        text = parse_tesseract_ocr_output(d['text'][i])
         conf = d['conf'][i] / 100. if d['conf'][i] >= 0 else d['conf'][i]  # normalized confidence
         (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
         (x_left, y_top, x_right, y_down) = (x, y, x + w, y + h)
@@ -54,7 +54,7 @@ def parse_tesseract_ocr_output(string):
     return string
 
 
-NAME_2_FN = {"tesseract": run_tesseract_string_only, "mmocr": None}
+NAME_2_FN = {"tesseract": run_tesseract, "mmocr": None}
 
 
 def get_ocr_fn(model_name):

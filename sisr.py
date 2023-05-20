@@ -78,27 +78,31 @@ def run_sr_inference(lr_img, model, scale, window_size=None, tile=None, tile_ove
     lr_img = torch.cat([lr_img, torch.flip(lr_img, [3])], 3)[:, :, :, :w_old + w_pad]
 
     if tile is None:
+        # if no tiling => run the model on the entire image in one go
         sr_img = model(lr_img)
     else:
         b, c, h, w = lr_img.shape
-        tile = min(tile, h, w)
+        tile = min(tile, h, w)  # tiles should be smaller than the height/width
         assert tile is None or window_size is None or tile % window_size == 0, \
             "ERROR: Tile should be a multiple of window size."
 
         stride = tile - tile_overlap
         h_idx_list = list(range(0, h - tile, stride)) + [h - tile]
         w_idx_list = list(range(0, w - tile, stride)) + [w - tile]
-        e = torch.zeros(b, c, h * scale, w * scale).type_as(lr_img)
-        w = torch.zeros_like(e)
+        e = torch.zeros(b, c, h * scale, w * scale).type_as(lr_img)  # where the output image will be saved
+        w = torch.zeros_like(e)  # count how many tiles are added on top of each other on each pixel
 
         for h_idx in h_idx_list:
             for w_idx in w_idx_list:
+                # get a tile and run the model on it
                 in_patch = lr_img[..., h_idx:h_idx + tile, w_idx:w_idx + tile]
                 out_patch = model(in_patch)
-                out_patch_mask = torch.ones_like(out_patch)
 
+                # add the tile output to the resulting image and also increase the tile count for these pixels
+                out_patch_mask = torch.ones_like(out_patch)
                 e[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(out_patch)
                 w[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(out_patch_mask)
+        # divide the pixels of the output image by the number of tiles which added to that pixel
         sr_img = e.div_(w)
 
     sr_img = sr_img[..., :h_old * scale, :w_old * scale]

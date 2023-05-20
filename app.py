@@ -42,10 +42,9 @@ def run_ocr():
 
     # process
     ocr_fn = get_ocr_fn(model_name)
-    result_text = ocr_fn(sr_img)
+    ocr_output = ocr_fn(sr_img)
 
-    response = {'text': result_text}
-    return jsonify(response)
+    return jsonify(ocr_output)
 
 
 if __name__ == '__main__':

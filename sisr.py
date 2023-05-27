@@ -1,5 +1,6 @@
 import os
 import torch
+from tqdm import tqdm
 from functools import partial
 
 from image_utils import np_rgb_uint_2_tensor_norm, tensor_norm_2_np_rgb_uint
@@ -11,8 +12,11 @@ from basicsr.archs.rrdbnet_arch import RRDBNet as BasicSRRRDBNet
 SCALE = 4  # super-resolution scale
 SWIN_WINDOW_SIZE = 8  # window size used for SwinIR and Swin2SR for Real Image Super-Resolution
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # device to run SISR model
-ARCHITECTURES_DIR = "./sisr_architectures/"  # directory with architecture classes
-MODEL_WEIGHTS = "./sisr_weights/"  # directory with model weights
+USE_TQDM = True  # whether to display progress bar during tiled inference
+
+REPO_DIR = os.path.dirname(os.path.realpath(__file__))
+ARCHITECTURES_DIR = os.path.join(REPO_DIR, "sisr_architectures/")  # directory with architecture classes
+MODEL_WEIGHTS = os.path.join(REPO_DIR, "sisr_weights/")  # directory with model weights
 
 # default tile parameters
 TILE_SIZE = 400
@@ -83,25 +87,26 @@ def run_sr_inference(lr_img, model, scale, window_size=None, tile=None, tile_ove
     else:
         b, c, h, w = lr_img.shape
         tile = min(tile, h, w)  # tiles should be smaller than the height/width
-        assert tile is None or window_size is None or tile % window_size == 0, \
-            "ERROR: Tile should be a multiple of window size."
+        assert window_size is None or tile % window_size == 0, "ERROR: Tile should be a multiple of window size."
 
-        stride = tile - tile_overlap
+        stride = max(tile - tile_overlap, 5)  # lower bound for stride such that it is never negative or too small
         h_idx_list = list(range(0, h - tile, stride)) + [h - tile]
         w_idx_list = list(range(0, w - tile, stride)) + [w - tile]
         e = torch.zeros(b, c, h * scale, w * scale).type_as(lr_img)  # where the output image will be saved
         w = torch.zeros_like(e)  # count how many tiles are added on top of each other on each pixel
 
-        for h_idx in h_idx_list:
-            for w_idx in w_idx_list:
-                # get a tile and run the model on it
-                in_patch = lr_img[..., h_idx:h_idx + tile, w_idx:w_idx + tile]
-                out_patch = model(in_patch)
+        with tqdm(total=len(h_idx_list + w_idx_list), disable=not USE_TQDM) as pbar:
+            for h_idx in h_idx_list:
+                for w_idx in w_idx_list:
+                    # get a tile and run the model on it
+                    in_patch = lr_img[..., h_idx:h_idx + tile, w_idx:w_idx + tile]
+                    out_patch = model(in_patch)
 
-                # add the tile output to the resulting image and also increase the tile count for these pixels
-                out_patch_mask = torch.ones_like(out_patch)
-                e[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(out_patch)
-                w[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(out_patch_mask)
+                    # add the tile output to the resulting image and also increase the tile count for these pixels
+                    mask = torch.ones_like(out_patch)
+                    e[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(out_patch)
+                    w[..., h_idx * scale:(h_idx + tile) * scale, w_idx * scale:(w_idx + tile) * scale].add_(mask)
+                    pbar.update(1)
         # divide the pixels of the output image by the number of tiles which added to that pixel
         sr_img = e.div_(w)
 

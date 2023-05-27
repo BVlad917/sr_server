@@ -54,7 +54,7 @@ def parse_tesseract_ocr_output(string):
     return string
 
 
-NAME_2_FN = {"tesseract": run_tesseract, "mmocr": None}
+NAME_2_FN = {"tesseract": run_tesseract_string_only, "mmocr": None}
 
 
 def get_ocr_fn(model_name):

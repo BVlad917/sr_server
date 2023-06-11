@@ -44,7 +44,6 @@ def run_ocr():
     ocr_fn = get_ocr_fn(model_name)
     ocr_output = ocr_fn(sr_img)
 
-    ocr_output = {'text': ocr_output}
     return jsonify(ocr_output)
 
 

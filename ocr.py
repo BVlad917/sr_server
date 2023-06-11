@@ -1,3 +1,5 @@
+import cv2
+import base64
 from pytesseract import Output
 from pytesseract import pytesseract
 
@@ -29,18 +31,29 @@ def run_tesseract(img):
         upper left and lower right points
     """
     d = pytesseract.image_to_data(img, output_type=Output.DICT)
-    texts, confidences, boxes = [], [], []
+    texts, boxes = [], []
     num_boxes = len(d['level'])
     for i in range(num_boxes):
         text = parse_tesseract_ocr_output(d['text'][i])
-        conf = d['conf'][i] / 100. if d['conf'][i] >= 0 else d['conf'][i]  # normalized confidence
+        # conf = d['conf'][i] / 100. if d['conf'][i] >= 0 else d['conf'][i]  # normalized confidence
         (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-        (x_left, y_top, x_right, y_down) = (x, y, x + w, y + h)
+        upper_left = (x, y)
+        upper_right = (x + w, y)
+        lower_right = (x + w, y + h)
+        lower_left = (x, y + h)
+        polygon = [*upper_left, *upper_right, *lower_right, *lower_left]
 
+        # if the detector worked but the text recognition model didn't find anything => skip
+        if not len(text):
+            continue
+
+        boxes.append(polygon)
         texts.append(text)
-        confidences.append(conf)
-        boxes.append((x_left, y_top, x_right, y_down))
-    return {"text": texts, "confidence": confidences, "box": boxes}
+
+    # todo: hack, fix and remove the next 2 lines (also don't return the image)
+    _, img_bytes = cv2.imencode('.png', img)
+    image_data = base64.b64encode(img_bytes).decode('utf-8')
+    return {"image": image_data, "boxes": boxes, "texts": texts}
 
 
 def parse_tesseract_ocr_output(string):
@@ -54,7 +67,7 @@ def parse_tesseract_ocr_output(string):
     return string
 
 
-NAME_2_FN = {"tesseract": run_tesseract_string_only, "mmocr": None}
+NAME_2_FN = {"tesseract": run_tesseract, "mmocr": None}
 
 
 def get_ocr_fn(model_name):

@@ -8,6 +8,24 @@ PATH_2_TESSERACT = "/usr/local/bin/tesseract"
 pytesseract.tesseract_cmd = PATH_2_TESSERACT
 
 
+def find_upscale_ratio(height, width, min_height=70, min_width=210):
+    if height < min_height or width < min_width:
+        return max(min_height / height, min_width / width)
+    return None
+
+
+def resize_image(image):
+    height, width = image.shape[:2]
+    ratio = find_upscale_ratio(height=height, width=width)
+    if ratio is not None:
+        new_height = int(height * ratio)
+        new_width = int(width * ratio)
+        resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+        return resized_image
+
+    return image
+
+
 def run_tesseract_string_only(img):
     """
     Run Google Tesseract OCR on the given image and return the string prediction(s). Does not return
@@ -31,6 +49,7 @@ def run_tesseract(img):
         upper left and lower right points
     """
     d = pytesseract.image_to_data(img, output_type=Output.DICT)
+    ratio = find_upscale_ratio(*img.shape[:2])
     texts, boxes = [], []
     num_boxes = len(d['level'])
     for i in range(num_boxes):
@@ -42,6 +61,8 @@ def run_tesseract(img):
         lower_right = (x + w, y + h)
         lower_left = (x, y + h)
         polygon = [*upper_left, *upper_right, *lower_right, *lower_left]
+        if ratio is not None:
+            polygon = list(map(lambda c: int(c * ratio), polygon))
 
         # if the detector worked but the text recognition model didn't find anything => skip
         if not len(text):
@@ -51,6 +72,7 @@ def run_tesseract(img):
         texts.append(text)
 
     # todo: hack, fix and remove the next 2 lines (also don't return the image)
+    img = resize_image(img)
     _, img_bytes = cv2.imencode('.png', img)
     image_data = base64.b64encode(img_bytes).decode('utf-8')
     return {"image": image_data, "boxes": boxes, "texts": texts}

@@ -41,7 +41,7 @@ def run_ocr():
     sr_img = cv2.imdecode(sr_img, cv2.IMREAD_COLOR)
 
     # process
-    ocr_fn = get_ocr_fn(model_name)
+    ocr_fn = get_ocr_fn(model_name=model_name)
     ocr_output = ocr_fn(sr_img)
 
     return jsonify(ocr_output)

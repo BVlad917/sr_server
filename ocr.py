@@ -71,7 +71,6 @@ def run_tesseract(img):
         boxes.append(polygon)
         texts.append(text)
 
-    # todo: hack, fix and remove the next 2 lines (also don't return the image)
     img = resize_image(img)
     _, img_bytes = cv2.imencode('.png', img)
     image_data = base64.b64encode(img_bytes).decode('utf-8')
